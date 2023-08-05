@@ -1,8 +1,3 @@
-from bs4 import BeautifulSoup
-import requests
-
-from pyzabbix import ZabbixMetric, ZabbixSender
-
 # Add logging 
 # Neaten up function calls
 # Add safety 
@@ -11,120 +6,83 @@ from pyzabbix import ZabbixMetric, ZabbixSender
   # Zabbix processing
 # Add threading
 
+import logging
+from logging.handlers import TimedRotatingFileHandler
+
+from bs4 import BeautifulSoup
+from pyzabbix import ZabbixMetric, ZabbixSender
+
+
+import configparser
+
+import sys
+from time import sleep
+import json
+import os
+
+from Sharpy import Sharpy, SharpyHelper
+
+logger = logging.getLogger('claypaky-parse')
+configPath = filename=os.path.join(sys.path[0], "config.ini")
+
+
+
+
 zabbix_ip="192.168.0.116"
+zabbix_packet = []
+
+sharpys = []
+
+#--------- PROGRAM START ----------
+
+log_file_handler = TimedRotatingFileHandler(filename=os.path.join(sys.path[0], "runtime.log"), when='D', interval=1, backupCount=10,
+                                    encoding='utf-8',
+                                    delay=False)
+
+log_console_handler = logging.StreamHandler(sys.stdout)
+
+log_formatter = logging.Formatter('%(asctime)s - %(name)s - %(levelname)s - %(message)s')
+
+log_file_handler.setFormatter(log_formatter)
+log_console_handler.setFormatter(log_formatter)
+
+
+logger.setLevel(logging.DEBUG)
+
+logger.addHandler(log_file_handler)
+logger.addHandler(log_console_handler)
+
+logger.info("Entering program")
+
+# Logging initialised
+
+zabbixServer = ZabbixSender(zabbix_server=zabbix_ip, timeout=1)
+
+for i in range(81, 83):
+  sharpy = Sharpy(logger, "192.168.0." + str(i), str(i))
+  sharpys.append(sharpy)
+
+# TODO make this all happen in parallel in the future
+while True:
+  for sharpy in sharpys:
+    SharpyHelper.update(logger, sharpy)
+    zabbixPacket = SharpyHelper.generatePacket(logger, sharpy)
+    logger.debug(zabbix_packet)
+    serverResponse = zabbixServer.send(zabbix_packet) 
+    logger.info(serverResponse)
+
+  sleep(5)
+
+
+
+
+###########__________OLD CODE___________#############
+
 
 packet=[]
-IP_address_List = ["192.168.0.81",
-                   "192.168.0.82",
-                   "192.168.0.83",
-                   "192.168.0.84",
-                   "192.168.0.85",
-                   "192.168.0.86",
-                   "192.168.0.87",
-                   "192.168.0.88",
-                   "192.168.0.89",
-                   "192.168.0.90",
-                   "192.168.0.91"]
 
-for IP_address in IP_address_List:
-  #Authenticate
-  #Ip address of unit to authenticate with
-  url = "http://"+ IP_address + "/authenticating.html?passwd=cp1234"
-
-  s = requests.session() 
-  response = s.post(url) 
-  print(response.status_code) # If the request went Ok we usually get a 200 status.
-
-for IP_address in IP_address_List:
-
-  Host_Name="Sharpy " + IP_address.rsplit(".",1)[1]
-  print(Host_Name)
-
-  #the url to pull Lamp & Firmware info from
-  url = "http://"+ IP_address +"/informations.html"
-  req = requests.get(url, headers={"Content-Type":"text"})
-  soup = BeautifulSoup(req.text, "html.parser")
-
-  #find the first table, which includes the firmware version
-  text_table=soup.find("table").get_text()
-  Firmware_list=[line for line in text_table.split('\n') if line.strip()]
-  print("Firmware : " + Firmware_list[13]) #Firmware version
-  packet.append(ZabbixMetric(Host_Name, 'firmware.version', Firmware_list[13]))
-  
-  #pull lamp hours, strikes fixture hours
-  text_table=soup.find("table",{"class":"ShownTable"}).get_text()
-  Hours_list=[line for line in text_table.split('\n') if line.strip()]
-  
-  print("Total Fixture Hours : " + Hours_list[5]) #total hours
-  packet.append(ZabbixMetric(Host_Name, 'fixture.hours', Hours_list[5]))
-  
-  print("Lamp Hours : " + Hours_list[8]) #Lamp hours
-  packet.append(ZabbixMetric(Host_Name, 'lamp.hours', Hours_list[8]))
-  print("Lamp Strikes : " + Hours_list[11]) #Lamp strikes
-  packet.append(ZabbixMetric(Host_Name, 'lamp.strikes', Hours_list[11]))
+for IP_address in IP_address_List:  
   #---------Pull Sensor Status-----------------
-
-  #the url to pull Lamp & Firmware info from
-  url = "http://"+ IP_address +"/sensors_status.html"
-  req = requests.get(url)
-  soup = BeautifulSoup(req.text, "html.parser")
-
-  #find the first table, which includes the firmware version
-  text_table=soup.find("table").get_text()
-  Sensor_Status_list=[line for line in text_table.split('\n') if line.strip()]
-  #print(Sensor_Status_list) #sensor list
-  print("")
-  print("Pan Errors : " + Sensor_Status_list[9]) #Pan Errors
-  packet.append(ZabbixMetric(Host_Name, 'error.pan', Sensor_Status_list[9]))
-  print("Tilt Errors : " + Sensor_Status_list[14]) #Tilt Error
-  packet.append(ZabbixMetric(Host_Name, 'error.tilt', Sensor_Status_list[14]))
-  print("Cyan Errors : " + Sensor_Status_list[19]) #Cyan Error
-  packet.append(ZabbixMetric(Host_Name, 'error.cyan', Sensor_Status_list[19]))
-  print("Magenta Errors : " + Sensor_Status_list[24]) #Magenta Error
-  packet.append(ZabbixMetric(Host_Name, 'error.magenta', Sensor_Status_list[24]))
-  print("Yellow Errors : " + Sensor_Status_list[29]) #Yellow Error
-  packet.append(ZabbixMetric(Host_Name, 'error.yellow', Sensor_Status_list[29]))
-
-  print("Colour Wheel Errors : " + Sensor_Status_list[34]) #Colour Wheel Error
-  packet.append(ZabbixMetric(Host_Name, 'error.colourwheel', Sensor_Status_list[34]))
-  print("Stop/Strobe Errors : " + Sensor_Status_list[39]) #Stop/Strobe Errors
-  packet.append(ZabbixMetric(Host_Name, 'error.stopstrobe', Sensor_Status_list[39]))
-  print("Dimmer : " + Sensor_Status_list[44]) #Dimmer Error
-  packet.append(ZabbixMetric(Host_Name, 'dimmer', Sensor_Status_list[44]))
-  print("Ovalier Chg : " + Sensor_Status_list[49]) #Ovalier Chg
-  packet.append(ZabbixMetric(Host_Name, 'error.ovalierchg', Sensor_Status_list[49]))
-  print("Prism Rotate : " + Sensor_Status_list[54]) #Prism Rotate
-  packet.append(ZabbixMetric(Host_Name, 'prism.rotate', Sensor_Status_list[54]))
-  print("Frost 1 : " + Sensor_Status_list[59]) #Frost 1
-  packet.append(ZabbixMetric(Host_Name, 'error.frost1', Sensor_Status_list[59]))
-  print("Frost 2 : " + Sensor_Status_list[64]) #Frost 2
-  packet.append(ZabbixMetric(Host_Name, 'error.frost2', Sensor_Status_list[64]))
-  print("Zoom : " + Sensor_Status_list[69]) #Zoom Error
-  packet.append(ZabbixMetric(Host_Name, 'zoom', Sensor_Status_list[69]))
-  print("ZoomCP : " + Sensor_Status_list[74]) #ZoomCp Error
-  packet.append(ZabbixMetric(Host_Name, 'zoom.cp', Sensor_Status_list[74]))
-
-  #---------Pull Fan Speeds-----------------
-
-
-  #the url to pull Lamp & Firmware info from
-  url = "http://"+ IP_address +"/fans_monitor.html"
-  req = requests.get(url)
-  soup = BeautifulSoup(req.text, "html.parser")
-
- #find the first table, which includes the fan seeds
-  text_table=soup.find("table").get_text()
-  Fan_speed_list=[line for line in text_table.split('\n') if line.strip()]
-  #print(Fan_speed_list) 
-  print("")
-  print("Power Supply : " + Fan_speed_list[5]) #Power Supply
-  packet.append(ZabbixMetric(Host_Name, 'fan.Powersupply', Fan_speed_list[5]))
-  print("Lamp Cooling : " + Fan_speed_list[8]) #Lamp Cooling
-  packet.append(ZabbixMetric(Host_Name, 'fan.lampcooling', Fan_speed_list[8]))
-  print("Lamp Cooling 2 : " + Fan_speed_list[11]) #Lamp Cooling 2
-  packet.append(ZabbixMetric(Host_Name, 'fan.lampcooling2', Fan_speed_list[11]))
-  print("Ballast : " + Fan_speed_list[14]) #Ballast
-  packet.append(ZabbixMetric(Host_Name, 'fan.ballast', Fan_speed_list[14]))
 
   #---------Pull Board communication Status-----------------
 
@@ -176,8 +134,5 @@ for IP_address in IP_address_List:
   if len(system_errors_list) > 6:
     print(system_errors_list[9])
     packet.append(ZabbixMetric(Host_Name, 'errors.system', system_errors_list[9]))
-
-print(packet)
-print(ZabbixSender(zabbix_server=zabbix_ip, timeout = 1).send(packet))
 
 

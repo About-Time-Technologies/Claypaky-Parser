@@ -58,20 +58,21 @@ logger.info("Entering program")
 
 zabbixServer = ZabbixSender(zabbix_server=zabbix_ip, timeout=1)
 
-for i in range(81, 83):
+
+for i in range(81, 92):
   sharpy = Sharpy(logger, "192.168.0." + str(i), str(i))
   sharpys.append(sharpy)
 
 # TODO make this all happen in parallel in the future
 while True:
   for sharpy in sharpys:
-    SharpyHelper.update(logger, sharpy)
-    zabbixPacket = SharpyHelper.generatePacket(logger, sharpy)
+    if not SharpyHelper.update(logger, sharpy): continue
+    zabbix_packet = SharpyHelper.generatePacket(logger, sharpy)
     logger.debug(zabbix_packet)
     serverResponse = zabbixServer.send(zabbix_packet) 
     logger.info(serverResponse)
 
-  sleep(5)
+  sleep(120)
 
 
 

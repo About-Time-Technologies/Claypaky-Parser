@@ -18,6 +18,12 @@ class Error():
         self.zoom           = None
         self.zoom_cp        = None
 
+        self.pt3f           = None
+        self.ch6            = None
+        self.ch6_2          = None
+        self.bus_frequency  = None
+        self.bus_deviation  = None
+
 class Fan():
     def __init__(self, logger):
         self.logger = logger
@@ -47,6 +53,8 @@ class Sharpy():
         self.logger.debug("Initialised Sharpy " + str(self.name))
 
     def updateVariable(self, oldVariable, newVariable, name):
+        if newVariable == None or newVariable == "NONE":
+            return oldVariable
         if (oldVariable != newVariable):
             self.logger.info("Sharpy " + self.name + " updating " + name + ": " + str(oldVariable) + " -> " + str(newVariable))
             oldVariable = newVariable
@@ -97,6 +105,8 @@ class Sharpy():
         self.fans.lamp_2 = self.updateVariable(self.fans.lamp_2, lamp_2, "lamp 2 fan speed")
         self.fans.ballast = self.updateVariable(self.fans.ballast, ballast, "ballast fan speed")
 
+    def updateDiagnostics(self, pt3f, ch6, ch6_2, bus_frequency, bus_deviation):
+        pass
 
 import requests
 from bs4 import BeautifulSoup
@@ -111,7 +121,7 @@ class SharpyHelper():
         s = requests.session()
 
         try:
-            response = s.post(url)
+            response = s.post(url, timeout=2)
             status = response.status_code
             logger.debug("Sharpy " + sharpy.name + ": status = " + str(status))
             sharpy.authenticated = True
@@ -141,6 +151,7 @@ class SharpyHelper():
     def update(logger, sharpy):
         SharpyHelper.authenticate(logger, sharpy)
         if sharpy.authenticated == False: 
+            logger.warn("Sharpy " + sharpy.name + ": Unable to authenticate")
             return False
 
         firmwareData = SharpyHelper.pullFromWebpage(logger, sharpy, "informations", {})
@@ -171,12 +182,14 @@ class SharpyHelper():
                              sensorData[59],    # Frost 1
                              sensorData[64],    # Frost 2
                              sensorData[69],    # Zoom
-                             sensorData[71],    # ZoomCp
+                             sensorData[74],    # ZoomCp
                              )
 
         fansData = SharpyHelper.pullFromWebpage(logger, sharpy, "fans_monitor", {})
         sharpy.updateFans(fansData[5], fansData[8], fansData[11], fansData[14])
 
+        #diagnosticData = SharpyHelper.pullFromWebpage(logger, sharpy, "board_diagnostic", {})
+        #sharpy.updateDiagnostics(diagnosticData[24][:-2])
 
 
         return True
@@ -215,5 +228,5 @@ class SharpyHelper():
         SharpyHelper.appendPacket(packet, host, "fan.lampcooling", sharpy.fans.lamp_1)
         SharpyHelper.appendPacket(packet, host, "fan.lampcooling2", sharpy.fans.lamp_2)
         SharpyHelper.appendPacket(packet, host, "fan.ballast", sharpy.fans.ballast)
-
+        
         return packet
